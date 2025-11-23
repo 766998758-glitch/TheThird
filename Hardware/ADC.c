@@ -43,8 +43,8 @@ uint16_t ADC_ReadSingleSensor(uint8_t channel)
 
 void ADC_ReadAllSensors(uint16_t *sensor_values)
 {
-    sensor_values[0] = ADC_ReadSingleSensor(ADC_Channel_4);  // PA4
-    sensor_values[1] = ADC_ReadSingleSensor(ADC_Channel_5);  // PA5
-    sensor_values[2] = ADC_ReadSingleSensor(ADC_Channel_6);  // PA6
-    sensor_values[3] = ADC_ReadSingleSensor(ADC_Channel_7);  // PA7
+    sensor_values[0] = ADC_ReadSingleSensor(ADC_Channel_4);  // PA4 -X1最左侧
+    sensor_values[1] = ADC_ReadSingleSensor(ADC_Channel_5);  // PA5 -X2中间
+    sensor_values[2] = ADC_ReadSingleSensor(ADC_Channel_6);  // PA6 -X3中间
+    sensor_values[3] = ADC_ReadSingleSensor(ADC_Channel_7);  // PA7 -X4最右侧
 }
