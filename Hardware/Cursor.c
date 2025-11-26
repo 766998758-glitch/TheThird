@@ -6,7 +6,7 @@
 uint8_t current_line = 1;
 uint8_t Key = 0;
 uint16_t Flag = 0;
-struct PID pid = {0.8, 0.01, 0.2}; //先用这个，之后再调整
+struct PID pid = {3.0, 0.02, 0.8}; //先用这个，之后再调整
 
 
 void Cursor_Init(void)

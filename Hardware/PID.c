@@ -32,24 +32,8 @@ float PID_Calculate(PID_Controller *pid, float error)
 //计算循迹误差
 float LineFollower_CalculateError(uint16_t *sensor_values)
 {
-    // X41检测白区 X32检测黑线
-
-    // 权重计算
-    float weighted_sum = 0;
-    float sum = 0;
-    
-    // 给每个传感器分配权重，检测黑线的权重更高
-    // 目前权重（之后会调整）:X1(-2.0), X2(-0.5), X3(0.5), X4(2.0)
-    weighted_sum = sensor_values[0] * (-2.0f) +  
-                   sensor_values[1] * (-0.5f) +  
-                   sensor_values[2] * (0.5f) +   
-                   sensor_values[3] * (2.0f);  
-    
-    sum = sensor_values[0] + sensor_values[1] + sensor_values[2] + sensor_values[3];
-    
-    if(sum == 0) return 0;  // 防止除0
-    
-    return weighted_sum / sum;
+    // 使用二进制版本
+    return BinaryLineFollower_CalculateError(sensor_values);
 }
 
 // 循迹更新 - 修复比较数无符号问题
@@ -65,6 +49,10 @@ void LineFollower_Update(PID_Controller *pid, uint16_t base_speed)
     
     // PID计算
     float pid_output = PID_Calculate(pid, error);
+	
+		//限制PID幅度
+		if(pid_output > 300) pid_output = 300;
+    if(pid_output < -300) pid_output = -300;
     
     // 计算左右轮速度
     int32_t left_speed_temp = (int32_t)base_speed - (int32_t)pid_output;

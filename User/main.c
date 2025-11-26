@@ -18,10 +18,10 @@ int main(void)
     //系统初始化
     OLED_Init();
     Key_Init();
-    Timer_Init();
     Motor_Init();
     ADC1_Module_Init();
 		Cursor_Init();
+	  Timer_Init();
     
     //显示静态界面
     OLED_ShowString(1, 3, "KP: ");
@@ -29,13 +29,16 @@ int main(void)
     OLED_ShowString(3, 3, "KD: ");
     OLED_ShowString(4, 3, "Set_Off: ");
     
-    
+	
     //PID控制器初始化（使用Cursor.c里的初始值）
     PID_Init(&line_pid, pid.kp, pid.ki, pid.kd, 1000);
     
     
-    while(1)
+	
+    while(1) 
     {
+			
+			
         //检查发车标志
         if(Flag == 1) {
             line_following_enabled = 1;
@@ -50,6 +53,22 @@ int main(void)
             line_pid.Ki = pid.ki;
             line_pid.Kd = pid.kd;
             
+//				// ========== 调试 ==========
+//     uint16_t sensor_values[4];
+//     ADC_ReadAllSensors(sensor_values);
+//     uint8_t sensor_states = Binary_GetSensorStates(sensor_values);
+//					
+//     float error = BinaryLineFollower_CalculateError(sensor_values);
+//				if(error < 0) {
+//					 OLED_ShowString(2, 17, "-");
+//					 OLED_ShowFloat(2, 18, -error, 1, 2);
+//					} 
+//				else {
+//					 OLED_ShowString(2, 17, "+");
+//					 OLED_ShowFloat(2, 18, error, 1, 2);
+//					}
+    
+					
             LineFollower_Update(&line_pid, 600);  //给个基础速度600
         } else {
             Car_Stop();

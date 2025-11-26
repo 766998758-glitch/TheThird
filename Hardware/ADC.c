@@ -43,8 +43,101 @@ uint16_t ADC_ReadSingleSensor(uint8_t channel)
 
 void ADC_ReadAllSensors(uint16_t *sensor_values)
 {
-    sensor_values[0] = ADC_ReadSingleSensor(ADC_Channel_4);  // PA4 -X1最左侧
-    sensor_values[1] = ADC_ReadSingleSensor(ADC_Channel_5);  // PA5 -X2中间
-    sensor_values[2] = ADC_ReadSingleSensor(ADC_Channel_6);  // PA6 -X3中间
-    sensor_values[3] = ADC_ReadSingleSensor(ADC_Channel_7);  // PA7 -X4最右侧
+    sensor_values[SENSOR_X2] = ADC_ReadSingleSensor(ADC_Channel_4);  // PA4 -X2最左侧
+    sensor_values[SENSOR_X1] = ADC_ReadSingleSensor(ADC_Channel_5);  // PA5 -X1中心靠左
+    sensor_values[SENSOR_X3] = ADC_ReadSingleSensor(ADC_Channel_6);  // PA6 -X3中心靠右
+    sensor_values[SENSOR_X4] = ADC_ReadSingleSensor(ADC_Channel_7);  // PA7 -X4最右侧
+}
+
+
+// 获取二进制传感器状态
+uint8_t Binary_GetSensorStates(uint16_t *sensor_values)
+{
+    uint8_t states = 0;
+    
+    for(int i = 0; i < 4; i++) {
+        if(sensor_values[i] < BLACK_THRESHOLD) {
+            states |= (1 << i);  // 检测到黑线，对应状态1
+        }
+    }
+    
+    return states;
+}
+
+// 二进制式误差计算(主体)，我们用位掩码
+float BinaryLineFollower_CalculateError(uint16_t *sensor_values)
+{
+    uint8_t sensor_states = Binary_GetSensorStates(sensor_values);
+	
+		static float previous_error = 0.0f; // 保存当前误差用于白区自救
+    
+    // 根据传感器状态计算误差
+    switch(sensor_states) {
+        case 0x06:   // 0110 x13在黑线，直行
+						previous_error = 0.0f;
+            return 0.0f;
+            
+        case 0x02: // 0010 仅x1检测黑线，略微右偏
+            previous_error = -0.8f;
+            return -0.8f;
+            
+        case 0x04: // 0100 仅x3检测黑线，略微左偏 
+            previous_error = 0.8f;
+            return 0.8f;
+            
+        case 0x03: // 0011 x21检测黑，明显右偏 
+            previous_error = -1.5f;
+            return -1.5f;
+            
+        case 0x0C: // 1100 x43检测黑，明显左偏 
+            previous_error = 1.5f;
+            return 1.5f;
+            
+        case 0x07: // 0111 大幅右偏
+						previous_error = -2.0f;
+            return -2.0f;
+            
+        case 0x0E: // 1110 大幅左偏
+            previous_error = 2.0f;
+            return 2.0f;
+            
+        case 0x01: // 0001 极右偏
+            previous_error = -2.5f;
+            return -2.5f;
+            
+        case 0x08: // 1000 极左偏 
+            previous_error = 2.5f;
+            return 2.5f;
+            
+        case 0x0F: // 1111 十字路口直行 
+            previous_error = 0.0f;
+            return 0.0f;
+            
+        case 0x00: // 0000 白区紧急自救 
+            // 
+            if(previous_error > 0) {
+                return 3.0f;   
+            } else {
+                return -3.0f;  
+            }
+            
+        default:
+            return 0.0f;
+    }
+}
+
+// 获取路线位置，返回-3~3的整数
+int8_t Binary_GetLinePosition(uint16_t *sensor_values)
+{
+    uint8_t states = Binary_GetSensorStates(sensor_values);
+    
+    // 位置权重计算
+    int8_t position = 0;
+    
+    if(states & (1 << SENSOR_X2)) position -= 2; // X2
+    if(states & (1 << SENSOR_X1)) position -= 1; // X1
+    if(states & (1 << SENSOR_X3)) position += 1; // X3
+    if(states & (1 << SENSOR_X4)) position += 2; // X4
+    
+    return position;
 }
