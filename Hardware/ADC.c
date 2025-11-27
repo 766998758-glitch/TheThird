@@ -70,7 +70,18 @@ float BinaryLineFollower_CalculateError(uint16_t *sensor_values)
     uint8_t sensor_states = Binary_GetSensorStates(sensor_values);
 	
 		static float previous_error = 0.0f; // 保存当前误差用于白区自救
+		static uint8_t lost_count = 0;
+		static uint8_t curve_direction = 0;  // 0直行，1左弯道，2右弯道
     
+	 // 检测弯道趋势
+    if(sensor_states == 0x04 || sensor_states == 0x0C || sensor_states == 0x08) {
+        curve_direction = 1; // 左转趋势
+    } else if(sensor_states == 0x02 || sensor_states == 0x03 || sensor_states == 0x01) {
+        curve_direction = 2; // 右转趋势
+    } else if(sensor_states == 0x06) {
+        curve_direction = 0; // 直行
+    }
+	
     // 根据传感器状态计算误差
     switch(sensor_states) {
         case 0x06:   // 0110 x13在黑线，直行
@@ -78,49 +89,68 @@ float BinaryLineFollower_CalculateError(uint16_t *sensor_values)
             return 0.0f;
             
         case 0x02: // 0010 仅x1检测黑线，略微右偏
-            previous_error = -0.8f;
-            return -0.8f;
+            previous_error = -1.8f;
+            return -1.8f;
             
         case 0x04: // 0100 仅x3检测黑线，略微左偏 
-            previous_error = 0.8f;
-            return 0.8f;
+            previous_error = 1.8f;
+            return 1.8f;
             
         case 0x03: // 0011 x21检测黑，明显右偏 
-            previous_error = -1.5f;
-            return -1.5f;
+            previous_error = -2.8f;
+            return -2.8f;
             
         case 0x0C: // 1100 x43检测黑，明显左偏 
-            previous_error = 1.5f;
-            return 1.5f;
+            previous_error = 2.8f;
+            return 2.8f;
             
         case 0x07: // 0111 大幅右偏
-						previous_error = -2.0f;
-            return -2.0f;
+						previous_error = -3.5f;
+            return -3.5f;
             
         case 0x0E: // 1110 大幅左偏
-            previous_error = 2.0f;
-            return 2.0f;
+            previous_error = 3.5f;
+            return 3.5f;
             
         case 0x01: // 0001 极右偏
-            previous_error = -2.5f;
+            previous_error = -4.2f;
             return -2.5f;
             
         case 0x08: // 1000 极左偏 
-            previous_error = 2.5f;
+            previous_error = 4.2f;
             return 2.5f;
             
         case 0x0F: // 1111 十字路口直行 
-            previous_error = 0.0f;
-            return 0.0f;
-            
+            lost_count = 0;
+            // 根据来到十字路口时的车头朝向情况(因为不可能是直着来的)，进行临时转向，以此循迹
+				if(curve_direction == 1)
+				{
+					return 1.5f;  // 右弯趋势，轻微左转
+				}
+				else if(curve_direction == 2)
+				{
+					return -1.5f; //同上，反之
+				}
+				else
+				{
+					return 0.0f;
+				}
+				
         case 0x00: // 0000 白区紧急自救 
-            // 
-            if(previous_error > 0) {
-                return 3.0f;   
-            } else {
-                return -3.0f;  
-            }
+            lost_count++;
+				// 动态增强的自救策略
+            float rescue_strength = 8.0f + (lost_count * 1.0f);
+            if(rescue_strength > 12.0f) rescue_strength = 12.0f;
             
+				// 根据目前弯道趋势，优化自救方向
+				if(curve_direction == 1 || previous_error >0)
+				{
+					return rescue_strength;
+				}
+				else
+				{
+					return -rescue_strength;
+				}
         default:
             return 0.0f;
     }

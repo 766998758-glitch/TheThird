@@ -46,19 +46,13 @@ int main(void)
             OLED_ShowString(4, 12, "RUN ");  //运行状态
         }
         
-        // 循迹控制
-        if(line_following_enabled) {
-            //使用Cursor.c里的数据实时控制
-            line_pid.Kp = pid.kp;
-            line_pid.Ki = pid.ki;
-            line_pid.Kd = pid.kd;
             
 //				// ========== 调试 ==========
-//     uint16_t sensor_values[4];
-//     ADC_ReadAllSensors(sensor_values);
-//     uint8_t sensor_states = Binary_GetSensorStates(sensor_values);
-//					
-//     float error = BinaryLineFollower_CalculateError(sensor_values);
+	//     uint16_t sensor_values[4];
+	//     ADC_ReadAllSensors(sensor_values);
+	//     uint8_t sensor_states = Binary_GetSensorStates(sensor_values);
+	//					
+	//     float error = BinaryLineFollower_CalculateError(sensor_values);
 //				if(error < 0) {
 //					 OLED_ShowString(2, 17, "-");
 //					 OLED_ShowFloat(2, 18, -error, 1, 2);
@@ -67,12 +61,6 @@ int main(void)
 //					 OLED_ShowString(2, 17, "+");
 //					 OLED_ShowFloat(2, 18, error, 1, 2);
 //					}
-    
-					
-            LineFollower_Update(&line_pid, 600);  //给个基础速度600
-        } else {
-            Car_Stop();
-        }
         
         Delay_ms(10);  //稍微延时让系统稳定一下
     }
@@ -84,6 +72,14 @@ void TIM2_IRQHandler(void)
     {
         Cursor_Tick();  //处理光标移动&PID参数传出
         Key_Tick();     //按键扫描
+			  // 循迹控制
+        if(line_following_enabled) {
+            //使用Cursor.c里的数据实时控制
+            line_pid.Kp = pid.kp;
+            line_pid.Ki = pid.ki;
+            line_pid.Kd = pid.kd;
+						LineFollower_Update(&line_pid, 500);  //给个基础速度500
+				}
         TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
     }
 }
