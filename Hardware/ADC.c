@@ -1,6 +1,5 @@
 #include "ADC.h"
 
-
 void ADC1_Module_Init(void) 
 {
     GPIO_InitTypeDef GPIO_InitStructure;
@@ -49,6 +48,35 @@ void ADC_ReadAllSensors(uint16_t *sensor_values)
     sensor_values[SENSOR_X4] = ADC_ReadSingleSensor(ADC_Channel_7);  // PA7 -X4最右侧
 }
 
+// 用于防止赛道与赛道间距过窄的"状态验证函数"
+uint8_t Validate_Sensor_States(uint8_t states, uint8_t previous_states)
+{
+    static uint8_t valid_count = 0;
+    
+    // 如果当前状态和上一状态差距过大，可能是误检测
+    uint8_t state_change = states ^ previous_states;
+    if(__builtin_popcount(state_change) >= 3) { // 如果三个以上传感器状态同时变化
+        valid_count++;
+        if(valid_count < 2) { // 则需要两次异常才=误检测
+            return previous_states; // 保持前一状态
+        }
+    } else {
+        valid_count = 0;
+    }
+    
+    // 过滤不可能的检测组合（跨界检测）
+    switch(states) {
+        case 0x09: // 1001 
+        case 0x05: // 0101 
+        case 0x0A: // 1010 
+            return previous_states; // 返回前一有效状态
+        
+        default:
+            return states;
+    }
+}
+
+
 
 // 获取二进制传感器状态
 uint8_t Binary_GetSensorStates(uint16_t *sensor_values)
@@ -67,25 +95,35 @@ uint8_t Binary_GetSensorStates(uint16_t *sensor_values)
 // 二进制式误差计算(主体)，我们用位掩码
 float BinaryLineFollower_CalculateError(uint16_t *sensor_values)
 {
+		static uint8_t previous_valid_states = 0x06; // 初始化为直行状态
+	
     uint8_t sensor_states = Binary_GetSensorStates(sensor_values);
 	
+	// 验证传感器状态，执行过滤处理
+	  uint8_t valid_states = Validate_Sensor_States(sensor_states, previous_valid_states);
+    previous_valid_states = valid_states;
+	
+	// 使用验证后的状态进行下面的所有处理
 		static float previous_error = 0.0f; // 保存当前误差用于白区自救
 		static uint8_t lost_count = 0;
 		static uint8_t curve_direction = 0;  // 0直行，1左弯道，2右弯道
     
 	 // 检测弯道趋势
-    if(sensor_states == 0x04 || sensor_states == 0x0C || sensor_states == 0x08) {
-        curve_direction = 1; // 左转趋势
-    } else if(sensor_states == 0x02 || sensor_states == 0x03 || sensor_states == 0x01) {
-        curve_direction = 2; // 右转趋势
-    } else if(sensor_states == 0x06) {
-        curve_direction = 0; // 直行
+    if(valid_states == 0x04 || valid_states == 0x0C || valid_states == 0x08 || 
+       valid_states == 0x0E) { // 1110
+        curve_direction = 1; 
+    } else if(valid_states == 0x02 || valid_states == 0x03 || valid_states == 0x01 ||
+              valid_states == 0x07) { // 011
+        curve_direction = 2; 
+    } else if(valid_states == 0x06) {
+        curve_direction = 0; 
     }
 	
     // 根据传感器状态计算误差
     switch(sensor_states) {
         case 0x06:   // 0110 x13在黑线，直行
 						previous_error = 0.0f;
+				    lost_count = 0;
             return 0.0f;
             
         case 0x02: // 0010 仅x1检测黑线，略微右偏
@@ -114,11 +152,11 @@ float BinaryLineFollower_CalculateError(uint16_t *sensor_values)
             
         case 0x01: // 0001 极右偏
             previous_error = -4.2f;
-            return -2.5f;
+            return -4.2f;
             
         case 0x08: // 1000 极左偏 
             previous_error = 4.2f;
-            return 2.5f;
+            return 4.2f;
             
         case 0x0F: // 1111 十字路口直行 
             lost_count = 0;
@@ -139,7 +177,7 @@ float BinaryLineFollower_CalculateError(uint16_t *sensor_values)
         case 0x00: // 0000 白区紧急自救 
             lost_count++;
 				// 动态增强的自救策略
-            float rescue_strength = 8.0f + (lost_count * 1.0f);
+            float rescue_strength = 4.0f + (lost_count * 0.25f);
             if(rescue_strength > 12.0f) rescue_strength = 12.0f;
             
 				// 根据目前弯道趋势，优化自救方向
@@ -152,7 +190,7 @@ float BinaryLineFollower_CalculateError(uint16_t *sensor_values)
 					return -rescue_strength;
 				}
         default:
-            return 0.0f;
+            return previous_error*0.7; //未知状态使用平滑过渡
     }
 }
 

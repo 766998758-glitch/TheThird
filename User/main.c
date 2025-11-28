@@ -78,7 +78,7 @@ void TIM2_IRQHandler(void)
             line_pid.Kp = pid.kp;
             line_pid.Ki = pid.ki;
             line_pid.Kd = pid.kd;
-						LineFollower_Update(&line_pid, 500);  //给个基础速度500
+						LineFollower_Update(&line_pid, 520);  //给个基础速度500
 				}
         TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
     }
