@@ -4,10 +4,12 @@
 #include <math.h>
 
 // 用于应对多重弯道
-static float error_history[3] = {0};
+static float error_history[5] = {0};
 static uint8_t history_index = 0;
 static uint8_t continuous_curve = 0;
 static uint8_t curve_side = 0; // 0无 1连续左弯 2连续右弯
+static uint8_t curve_memory = 0; // 弯道记忆，延长弯道状态
+static float weighted_error_sum = 0; // 加权误差和，对“近期误差”更加敏感
 
 // PID初始化
 void PID_Init(PID_Controller *pid, float kp, float ki, float kd, float integral_limit)
@@ -75,32 +77,55 @@ void LineFollower_Update(PID_Controller *pid, uint16_t base_speed)
 		/******连续弯道检测内容******/
 	  // 更新历史误差用于弯道检测  这个取余是干嘛的？
 		error_history[history_index] = error;
-    history_index = (history_index + 1) % 3;
+    history_index = (history_index + 1) % 5;
+		
+		weighted_error_sum = 0;
+    float weight_sum = 0;
+    for(int i = 0; i < 5; i++) {
+        float weight = 1.0f / (5 - i); // 近期误差权重更高
+        weighted_error_sum += error_history[i] * weight;
+        weight_sum += weight;
+    }
+    float weighted_error_avg = weighted_error_sum / weight_sum;
     
 		// 连续弯道检测
-		float error_sum = error_history[0] + error_history[1] + error_history[2];
-    float error_avg = error_sum / 3.0f;
-	
-		if(fabs(error_avg) > 1.5f) {
-        continuous_curve = 1;
-        curve_side = (error_avg > 0) ? 1 : 2;
+		uint8_t new_continuous_curve = 0;
+    uint8_t new_curve_side = 0;
+    
+    if(fabs(weighted_error_avg) > 1.2f) { // 降低阈值，更敏感
+        new_continuous_curve = 1;
+        new_curve_side = (weighted_error_avg > 0) ? 1 : 2;
+    }
+    
+    // 连续弯道记忆：如果刚刚是连续弯道，那就保持这个状态更长
+    if(continuous_curve && !new_continuous_curve) {
+        curve_memory++;
+        if(curve_memory < 3) { // 保持三个周期
+            new_continuous_curve = 1;
+            new_curve_side = curve_side;
+        } else {
+            curve_memory = 0;
+        }
     } else {
-        continuous_curve = 0;
-        curve_side = 0;
+        curve_memory = 0;
     }
-	
-		// 连续弯道时增强响应控制
+    
+    continuous_curve = new_continuous_curve;
+    curve_side = new_curve_side;
+    
+    // 连续弯道时加强控制响应
     if(continuous_curve) {
-        // 增强误差信号
-        error *= 1.5f;
-        // 略微提高ki，消除稳态误差
+        // 更强的误差信息放大
+        error *= 1.7f;  
+        
+        // 根据历史趋势，预设更强的转向偏差
+        if(curve_side == 1) {
+            error += 1.2f;   
+        } else if(curve_side == 2) {
+            error -= 1.2f;   
+        }
+        
         pid->Ki *= 1.2f;
-    }
-		
-		if(curve_side == 1) { // 连续左弯
-        error += 0.8f;   // 预设左弯
-    } else if(curve_side == 2) { // 连续右弯
-        error -= 0.8f;   // 预设右弯
     }
 		/******连续弯道检测内容******/
 		
@@ -115,10 +140,10 @@ void LineFollower_Update(PID_Controller *pid, uint16_t base_speed)
 		// 动态限幅
     float pid_limit = 250.0f;
     if(continuous_curve) {
-        pid_limit = 350.0f; // 连续弯道时提高限幅
+        pid_limit = 400.0f; // 连续弯道时提高限幅
     }
     if(fabs(error) > 3.0f) {
-        pid_limit = 400.0f; // 大误差时提高限幅
+        pid_limit = 440.0f; // 大误差时提高限幅
     }
     
 		if(pid_output > pid_limit) pid_output = pid_limit;
