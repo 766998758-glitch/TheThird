@@ -52,6 +52,11 @@ void ADC_ReadAllSensors(uint16_t *sensor_values)
 uint8_t Validate_Sensor_States(uint8_t states, uint8_t previous_states)
 {
     static uint8_t valid_count = 0;
+		// 直线的绿色通道，0110直接不参与过滤
+		if(states == 0x06) {
+					valid_count = 0;
+					return states; // 直接用0110
+			}
     
     // 如果当前状态和上一状态差距过大，可能是误检测
     uint8_t state_change = states ^ previous_states;
@@ -163,11 +168,11 @@ float BinaryLineFollower_CalculateError(uint16_t *sensor_values)
             // 根据来到十字路口时的车头朝向情况(因为不可能是直着来的)，进行临时转向，以此循迹
 				if(curve_direction == 1)
 				{
-					return 1.5f;  // 右弯趋势，轻微左转
+					return 1.9f;  // 右弯趋势，轻微左转
 				}
 				else if(curve_direction == 2)
 				{
-					return -1.5f; //同上，反之
+					return -1.9f; //同上，反之
 				}
 				else
 				{
